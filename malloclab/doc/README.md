@@ -25,7 +25,7 @@
 
 隐式空闲链表的数据结构如下图所示，一个块是由一个字的头部、有效载荷和一个字的脚部组成，头部记录了块的大小和分配信息（已分配的或空闲的），脚部是头部的一个副本，用于快速合并。在双字对齐的约束条件下，块的大小总是8的倍数，因此头部最低3位总是0，用其中的最低位（已分配位）来指明这个块是已分配的还是空闲的
 
-<img src="/home/comethru/tinykv/markdown/img/implicit-free-list.png" style="zoom: 67%;" />
+<img src="img/implicit-free-list.png" style="zoom: 67%;" />
 
 头部和脚部的中间就是应用调用malloc时请求的有效载荷和用于各种需求的填充部分，之所以称为隐式空闲链表是因为空闲块是通过头部中的大小字段隐含地连接着的，分配器可以通过遍历堆中的所有块从而间接地遍历空闲块集合
 
@@ -388,7 +388,7 @@ void *mm_realloc(void *ptr, size_t newsize)
 
 显式空闲链表的数据结构如下图所示，在每个空闲块中都包含一个祖先（pred）和后继（succ），位于有效载荷的前两个字中，分别指向前一个和后一个插入到空闲链表中的空闲块
 
-<img src="/home/comethru/tinykv/markdown/img/explicit-free-list.png" style="zoom: 33%;" />
+<img src="img/explicit-free-list.png" style="zoom: 33%;" />
 
 
 
@@ -785,8 +785,8 @@ static void delete_node(void *fbp)
 
 隐式空闲链表 + 下一次适配：
 
-<img src="/home/comethru/tinykv/markdown/img/result1.png" style="zoom: 67%;" />
+<img src="img/result1.png" style="zoom: 67%;" />
 
 显式空闲链表 + 分离适配：
 
-<img src="/home/comethru/tinykv/markdown/img/result2.png" style="zoom: 67%;" />
+<img src="img/result2.png" style="zoom: 67%;" />
