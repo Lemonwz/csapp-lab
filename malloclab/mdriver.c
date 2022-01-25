@@ -17,6 +17,7 @@
 #include <time.h>
 
 #include "mm.h"
+#include "mm1.h"
 #include "memlib.h"
 #include "fsecs.h"
 #include "config.h"
@@ -32,6 +33,9 @@
 
 /* Returns true if p is ALIGNMENT-byte aligned */
 #define IS_ALIGNED(p)  ((((unsigned int)(p)) % ALIGNMENT) == 0)
+
+/* mm.c(0) or mm1.c(1) */
+#define mm 1
 
 /****************************** 
  * The key compound data types 
@@ -147,7 +151,7 @@ int main(int argc, char **argv)
     stats_t *mm_stats = NULL;  /* mm (i.e. student) stats for each trace */
     speed_t speed_params;      /* input parameters to the xx_speed routines */ 
 
-    int team_check = 1;  /* If set, check team structure (reset by -a) */
+    int team_check = 0;  /* If set, check team structure (reset by -a) */
     int run_libc = 0;    /* If set, run libc malloc (set by -l) */
     int autograder = 0;  /* If set, emit summary info for autograder (-g) */
 
@@ -487,7 +491,7 @@ static trace_t *read_trace(char *tracedir, char *filename)
     /* Allocate the trace record */
     if ((trace = (trace_t *) malloc(sizeof(trace_t))) == NULL)
 	unix_error("malloc 1 failed in read_trance");
-	
+
     /* Read the trace file header */
     strcpy(path, tracedir);
     strcat(path, filename);
@@ -499,7 +503,7 @@ static trace_t *read_trace(char *tracedir, char *filename)
     fscanf(tracefile, "%d", &(trace->num_ids));     
     fscanf(tracefile, "%d", &(trace->num_ops));     
     fscanf(tracefile, "%d", &(trace->weight));        /* not used */
-    
+
     /* We'll store each request line in the trace in this array */
     if ((trace->ops = 
 	 (traceop_t *)malloc(trace->num_ops * sizeof(traceop_t))) == NULL)
@@ -579,6 +583,7 @@ static int eval_mm_valid(trace_t *trace, int tracenum, range_t **ranges)
     int i, j;
     int index;
     int size;
+	int mminit;
     int oldsize;
     char *newp;
     char *oldp;
@@ -589,8 +594,9 @@ static int eval_mm_valid(trace_t *trace, int tracenum, range_t **ranges)
     clear_ranges(ranges);
 
     /* Call the mm package's init function */
-    if (mm_init() < 0) {
-	malloc_error(tracenum, 0, "mm_init failed.");
+	mminit = mm?mm1_init():mm_init();
+    if (mminit < 0) {
+	malloc_error(tracenum, 0, "mm init failed.");
 	return 0;
     }
 
@@ -604,11 +610,12 @@ static int eval_mm_valid(trace_t *trace, int tracenum, range_t **ranges)
         case ALLOC: /* mm_malloc */
 
 	    /* Call the student's malloc */
-	    if ((p = mm_malloc(size)) == NULL) {
-		malloc_error(tracenum, i, "mm_malloc failed.");
+		p = mm?mm1_malloc(size):mm_malloc(size);
+	    if (p == NULL) {
+		malloc_error(tracenum, i, "mm malloc failed.");
 		return 0;
 	    }
-	    
+
 	    /* 
 	     * Test the range of the new block for correctness and add it 
 	     * to the range list if OK. The block must be  be aligned properly,
@@ -633,8 +640,9 @@ static int eval_mm_valid(trace_t *trace, int tracenum, range_t **ranges)
 	    
 	    /* Call the student's realloc */
 	    oldp = trace->blocks[index];
-	    if ((newp = mm_realloc(oldp, size)) == NULL) {
-		malloc_error(tracenum, i, "mm_realloc failed.");
+		newp = mm?mm1_realloc(oldp, size):mm_realloc(oldp, size);
+	    if (newp == NULL) {
+		malloc_error(tracenum, i, "mm realloc failed.");
 		return 0;
 	    }
 	    
@@ -671,7 +679,11 @@ static int eval_mm_valid(trace_t *trace, int tracenum, range_t **ranges)
 	    /* Remove region from list and call student's free function */
 	    p = trace->blocks[index];
 	    remove_range(ranges, p);
-	    mm_free(p);
+		if(mm) {
+			mm1_free(p);
+		} else {
+			mm_free(p);
+		}
 	    break;
 
 	default:
@@ -699,6 +711,7 @@ static double eval_mm_util(trace_t *trace, int tracenum, range_t **ranges)
 {   
     int i;
     int index;
+	int mminit;
     int size, newsize, oldsize;
     int max_total_size = 0;
     int total_size = 0;
@@ -707,7 +720,8 @@ static double eval_mm_util(trace_t *trace, int tracenum, range_t **ranges)
 
     /* initialize the heap and the mm malloc package */
     mem_reset_brk();
-    if (mm_init() < 0)
+	mminit = mm?mm1_init():mm_init();
+    if (mminit < 0)
 	app_error("mm_init failed in eval_mm_util");
 
     for (i = 0;  i < trace->num_ops;  i++) {
@@ -717,7 +731,8 @@ static double eval_mm_util(trace_t *trace, int tracenum, range_t **ranges)
 	    index = trace->ops[i].index;
 	    size = trace->ops[i].size;
 
-	    if ((p = mm_malloc(size)) == NULL) 
+		p = mm?mm1_malloc(size):mm_malloc(size);
+	    if (p == NULL) 
 		app_error("mm_malloc failed in eval_mm_util");
 	    
 	    /* Remember region and size */
@@ -739,7 +754,8 @@ static double eval_mm_util(trace_t *trace, int tracenum, range_t **ranges)
 	    oldsize = trace->block_sizes[index];
 
 	    oldp = trace->blocks[index];
-	    if ((newp = mm_realloc(oldp,newsize)) == NULL)
+		newp = mm?mm1_realloc(oldp,newsize):mm_realloc(oldp,newsize);
+	    if (newp == NULL)
 		app_error("mm_realloc failed in eval_mm_util");
 
 	    /* Remember region and size */
@@ -760,7 +776,11 @@ static double eval_mm_util(trace_t *trace, int tracenum, range_t **ranges)
 	    size = trace->block_sizes[index];
 	    p = trace->blocks[index];
 	    
-	    mm_free(p);
+	    if(mm) {
+			mm1_free(p);
+		} else {
+			mm_free(p);
+		}
 	    
 	    /* Keep track of current total size
 	     * of all allocated blocks */
@@ -784,13 +804,14 @@ static double eval_mm_util(trace_t *trace, int tracenum, range_t **ranges)
  */
 static void eval_mm_speed(void *ptr)
 {
-    int i, index, size, newsize;
+    int i, index, size, newsize, mminit;
     char *p, *newp, *oldp, *block;
     trace_t *trace = ((speed_t *)ptr)->trace;
 
     /* Reset the heap and initialize the mm package */
     mem_reset_brk();
-    if (mm_init() < 0) 
+	mminit = mm?mm1_init():mm_init();
+    if (mminit < 0) 
 	app_error("mm_init failed in eval_mm_speed");
 
     /* Interpret each trace request */
@@ -800,16 +821,18 @@ static void eval_mm_speed(void *ptr)
         case ALLOC: /* mm_malloc */
             index = trace->ops[i].index;
             size = trace->ops[i].size;
-            if ((p = mm_malloc(size)) == NULL)
+			p = mm?mm1_malloc(size):mm_malloc(size);
+            if (p == NULL)
 		app_error("mm_malloc error in eval_mm_speed");
             trace->blocks[index] = p;
             break;
 
 	case REALLOC: /* mm_realloc */
-	    index = trace->ops[i].index;
+	    	index = trace->ops[i].index;
             newsize = trace->ops[i].size;
-	    oldp = trace->blocks[index];
-            if ((newp = mm_realloc(oldp,newsize)) == NULL)
+	    	oldp = trace->blocks[index];
+			newp = mm?mm1_realloc(oldp,newsize):mm_realloc(oldp,newsize);
+            if (newp == NULL)
 		app_error("mm_realloc error in eval_mm_speed");
             trace->blocks[index] = newp;
             break;
@@ -817,7 +840,11 @@ static void eval_mm_speed(void *ptr)
         case FREE: /* mm_free */
             index = trace->ops[i].index;
             block = trace->blocks[index];
-            mm_free(block);
+            if(mm) {
+				mm1_free(block);
+			} else {
+				mm_free(block);
+			}
             break;
 
 	default:
